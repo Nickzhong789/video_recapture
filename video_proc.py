@@ -61,10 +61,9 @@ def video_cap(video_label_list):
                 k_size = (3, 3) if i < 8 else (5, 5)
                 op = cv2.GaussianBlur(in_block, k_size, sigmaX_list[i % 8])
                 op_list.append(op)
-            block_list.append(np.stack(op_list))
-            block_label_list.append(v_label)
+            block_label_list.append([np.stack(op_list), v_label])
 
-        frame_block_list.append([block_list, block_label_list])
+        frame_block_list.append(block_label_list)
 
     return frame_block_list
 
