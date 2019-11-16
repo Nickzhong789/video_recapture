@@ -18,8 +18,8 @@ def generate_anno(path):
     df.to_csv('./video_anno.csv', index=None)
 
 
-def video_cap(video_label_list):
-    [video, v_label] = video_label_list
+def video_cap(v_l_list):
+    [video, v_label] = v_l_list
     video_obj = cv2.VideoCapture(video)
     ret_val = 1
     count = 0
@@ -30,9 +30,8 @@ def video_cap(video_label_list):
         if count % 5 == 0:
             frame_list.append([image, v_label])
 
-    frame_block_list = []
+    f_b_list = []
     for frame, label in frame_list:
-        block_list = []
         block_label_list = []
         gray = frame[:, :, 2]
         blocks = ([np.array(gray[m:m + 64, j:j + 64]) for j in range(0, gray.shape[1], 64)
@@ -57,15 +56,15 @@ def video_cap(video_label_list):
         sigmaX_list = [3.160, 3.800, 4.786, 6.309, 8.709, 12.589, 19.05, 31.62]
         op_list = []
         for in_block in input_blocks:
-            for i in range(16):
+            for j in range(16):
                 k_size = (3, 3) if i < 8 else (5, 5)
-                op = cv2.GaussianBlur(in_block, k_size, sigmaX_list[i % 8])
+                op = cv2.GaussianBlur(in_block, k_size, sigmaX_list[j % 8])
                 op_list.append(op)
             block_label_list.append([np.stack(op_list), v_label])
 
-        frame_block_list.append(block_label_list)
+        f_b_list.append(block_label_list)
 
-    return frame_block_list
+    return f_b_list
 
 
 def split_all(path):
@@ -109,3 +108,18 @@ def Label_Encode_Valid(block_labels_valid):
             block_labels_valid_encode.append(0)
 
     return block_labels_valid_encode
+
+
+if __name__ == '__main__':
+    root_path = './video_data/'
+    generate_anno(root_path)
+
+    video_info_list = []
+    df_v = pd.read_csv('./video_anno.csv')
+    for i in range(len(df_v)):
+        video_label_list = df_v.iloc[i]
+
+        frame_block_list = video_cap(video_label_list)
+        video_info_list.append(frame_block_list)
+
+    print(video_info_list)
