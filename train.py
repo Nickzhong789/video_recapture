@@ -5,8 +5,8 @@ import torch.optim
 from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 
-from model.resnet import ResNet
-from dataset import CFDataset
+from model.conv_net import ConvNet
+from dataset.video_dataset import VideoDataset
 from utils.osutil import *
 from utils.misc import adjust_learing_rate, save_checkpoint
 from utils.progress.bar import Bar
@@ -26,18 +26,19 @@ def main(args):
     if not isdir(args.model):
         mkdir_p(args.model)
 
-    print("==> create model ResComicFaceNet('{}', {})".format(args.level1, args.level2))
+    print("==> create model ConvNet")
 
-    model = ResComicFaceNet(level1=args.level1, level2=args.level2)
+    model = ConvNet()
 
-    criterion = nn.L1Loss(size_average=True).cuda()
+    criterion = nn.MSELoss().cuda()
+    # criterion = nn.NLLLoss().cuda()
 
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay
                                 )
-    title = 'comic-face'
+    title = 'Video-Capture'
 
     if args.resume:
         if isfile(args.resume):
@@ -61,8 +62,8 @@ def main(args):
 
     trainPath = args.training_dataset
     train_transform = transforms.Compose([
-        transforms.Resize((512, 448)),
-        transforms.RandomCrop(448),
+        # transforms.Resize((512, 448)),
+        # transforms.RandomCrop(448),
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip(),
         transforms.ToTensor(),
@@ -71,13 +72,13 @@ def main(args):
     ])
 
     train_loader = DataLoader(
-        CFDataset(trainPath, 'annotations.csv', train=True, transform=train_transform),
+        VideoDataset(trainPath, 'video_anno.csv', train=True, transform=None),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
 
     valid_transform = transforms.Compose([
-        transforms.Resize((512, 448)),
+        # transforms.Resize((512, 448)),
         # transforms.CenterCrop(448),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
@@ -85,7 +86,7 @@ def main(args):
     ])
 
     valid_loader = DataLoader(
-        CFDataset(trainPath, 'annotations.csv', train=False, transform=valid_transform),
+        VideoDataset(trainPath, 'video_anno.csv', train=False, transform=None),
         batch_size=args.test_batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
@@ -122,28 +123,21 @@ def train(model, train_loader, optimizer, criterion):
 
     end = time.time()
 
-    y_pred = torch.Tensor()
-    y = torch.Tensor()
-
     bar = Bar('Processing', max=len(train_loader))
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, (data, idx, target) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
-        if not type(data) in (tuple, list):
-            data = (data,)
-
-        input_var = tuple(d.cuda() for d in data)
-
-        target = target.float()
+        input_var = data.float().cuda()
+        target = torch.LongTensor(target)
         target_var = target.cuda()
 
         optimizer.zero_grad()
-        output = model(*input_var)
-
+        output = model(input_var)
+        # output = torch.max(output, 0)
         loss = criterion(output, target_var)
         out = output.data.cpu()
-        y_pred = torch.cat((y_pred, out))
-        y = torch.cat((y, target))
+        print('Target: ', target_var)
+        print('Output: ', out)
 
         loss.backward()
         optimizer.step()
@@ -167,7 +161,7 @@ def train(model, train_loader, optimizer, criterion):
 
     bar.finish()
 
-    acc = cal_auc(y_pred.numpy(), y.numpy())
+    acc = 0
 
     return losses.avg, acc
 
@@ -181,27 +175,19 @@ def validate(val_loader, model, criterion):
 
     end = time.time()
 
-    y_pred = torch.Tensor()
-    y = torch.Tensor()
-
     bar = Bar('Processing', max=len(val_loader))
-    for batch_idx, (data, target) in enumerate(val_loader):
+    for batch_idx, (data, idx, target) in enumerate(val_loader):
         data_time.update(time.time() - end)
 
-        if not type(data) in (tuple, list):
-            data = (data,)
+        input_var = data.type(torch.FloatTensor).cuda()
 
-        input_var = tuple(d.cuda() for d in data)
-
-        target = target.float()
+        # target = target.float()
         target_var = target.cuda()
 
-        output = model(*input_var)
+        output = model(input_var)
 
         loss = criterion(output, target_var)
         out = output.data.cpu()
-        y_pred = torch.cat((y_pred, out))
-        y = torch.cat((y, target))
 
         losses.update(loss.item())
 
@@ -222,18 +208,13 @@ def validate(val_loader, model, criterion):
 
     bar.finish()
 
-    acc = cal_auc(y_pred.numpy(), y.numpy())
-    print(y)
+    acc = 0
 
     return losses.avg, acc
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='PyTorch Comic-face')
-    parser.add_argument('--level1', type=int, default=18, metavar='N',
-                        help='number of epochs to train (default: 100)')
-    parser.add_argument('--level2', type=int, default=18, metavar='N',
-                        help='number of epochs to train (default: 100)')
+    parser = argparse.ArgumentParser(description='PyTorch Video-cap')
     parser.add_argument('--weight-decay', type=float, default=0.00005, metavar='N',
                         help='number of epochs to train (default: 100)')
 
@@ -243,9 +224,9 @@ if __name__ == '__main__':
                         help='number of data loading workers (default: 1)')
     parser.add_argument('--step_epoch', default=30, type=int, metavar='N',
                         help='decend the lr in epoch number')
-    parser.add_argument('--batch-size', type=int, default=4, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=16, metavar='N',
                         help='input batch size for training (default: 32)')
-    parser.add_argument('--test-batch-size', type=int, default=4, metavar='N',
+    parser.add_argument('--test-batch-size', type=int, default=16, metavar='N',
                         help='input batch size for testing (default: 32)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='manual epoch number (default: 100)')
@@ -261,9 +242,9 @@ if __name__ == '__main__':
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--training-dataset', type=str, default='./data/af2019-ksyun-training-20190416',
+    parser.add_argument('--training-dataset', type=str, default='',
                         help='Path to the data directory containing aligned face patches.')
-    parser.add_argument('--model', type=str, default='./checkpoint/res18-18',
+    parser.add_argument('--model', type=str, default='./checkpoint/convNet',
                         help='Path to the data directory containing aligned face patches.')
 
     main(parser.parse_args())
