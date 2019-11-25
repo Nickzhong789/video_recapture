@@ -31,12 +31,13 @@ def video_cap(video_label_list):
         count += 1
         if count % 5 == 0:
             frame_list.append([image, v_label])
-        # if count == 10:
-        #     break
+        if count == 10:
+            break
 
     frame_block_list = []
     f_idx = 0
     for frame, label in frame_list[:-1]:
+        block_list = []
         gray = frame[:, :, 2]
         blocks = ([np.array(gray[m:m + 64, j:j + 64]) for j in range(0, gray.shape[1], 64)
                    for m in range(0, gray.shape[0], 64)])
@@ -65,8 +66,19 @@ def video_cap(video_label_list):
                 k_size = (3, 3) if i < 8 else (5, 5)
                 op = cv2.GaussianBlur(in_block, k_size, sigmaX_list[i % 8])
                 op_list.append(op)
-            frame_block_list.append([np.stack(op_list), v_label, b_idx])
-
+            block_list.append([np.stack(op_list), v_label, b_idx])
+        frame_block_list.append(block_list)
         f_idx += 1
 
     return frame_block_list
+
+
+def get_blocks(df_v):
+    video_info_list = []
+    for i in range(len(df_v)):
+        frame_list = video_cap(df_v.iloc[i])
+        for block_list in frame_list:
+            for block_info in block_list:
+                video_info_list.append(block_info)
+
+    return video_info_list
