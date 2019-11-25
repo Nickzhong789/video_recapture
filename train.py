@@ -10,7 +10,7 @@ from dataset.video_dataset import VideoDataset
 from utils.osutil import *
 from utils.misc import adjust_learing_rate, save_checkpoint
 from utils.progress.bar import Bar
-from utils.eval import AverageMeter, cal_auc
+from utils.eval import AverageMeter, cal_acc
 from utils.logger import Logger
 
 import time
@@ -30,8 +30,7 @@ def main(args):
 
     model = ConvNet()
 
-    criterion = nn.MSELoss().cuda()
-    # criterion = nn.NLLLoss().cuda()
+    criterion = nn.NLLLoss().cuda()
 
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=args.lr,
@@ -96,8 +95,9 @@ def main(args):
         lr = adjust_learing_rate(optimizer, epoch, lr, args.step_epoch)
         print('\nEpoch: %d | LR: %.8f' % (epoch + 1, lr))
 
-        train_loss, train_acc = train(model, train_loader, optimizer, criterion)
-        valid_loss, valid_acc = validate(valid_loader, model, criterion)
+        train_loss, train_acc = train(model, train_loader, optimizer, criterion,
+                                      args.video_threshold, args.frame_threshold)
+        valid_loss, valid_acc = validate(valid_loader, model, criterion, args.video_threshold, args.frame_threshold)
 
         logger.append([epoch + 1, lr, train_loss, valid_loss, train_acc, valid_acc])
 
@@ -113,7 +113,7 @@ def main(args):
     logger.close()
 
 
-def train(model, train_loader, optimizer, criterion):
+def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -123,26 +123,34 @@ def train(model, train_loader, optimizer, criterion):
 
     end = time.time()
 
+    frame_dict = {}
+    video_dict = {}
+
     bar = Bar('Processing', max=len(train_loader))
-    for batch_idx, (data, idx, target) in enumerate(train_loader):
+    for batch_idx, (data, target, idx) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
         input_var = data.float().cuda()
-        target = torch.LongTensor(target)
-        target_var = target.cuda()
+        target_var = target.long().cuda()
 
         optimizer.zero_grad()
         output = model(input_var)
-        # output = torch.max(output, 0)
+        _, predicted = torch.max(output, 1)
         loss = criterion(output, target_var)
         out = output.data.cpu()
-        print('Target: ', target_var)
-        print('Output: ', out)
+        # print('Target: ', target_var)
+        # print('Output: ', out)
+        # print('predicted: ', predicted)
 
         loss.backward()
         optimizer.step()
 
         losses.update(loss.item())
+
+        for i in range(len(idx)):
+            if idx[i] not in frame_dict.keys():
+                frame_dict[idx[i]] = 0
+            frame_dict[idx[i]] += 1 if target[i].item() == predicted[i].item() else 0
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -161,12 +169,12 @@ def train(model, train_loader, optimizer, criterion):
 
     bar.finish()
 
-    acc = 0
+    acc = cal_acc(video_dict, frame_dict, v_threshold, f_threshold)
 
     return losses.avg, acc
 
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion, v_threshold, f_threshold):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -175,21 +183,32 @@ def validate(val_loader, model, criterion):
 
     end = time.time()
 
+    frame_dict = {}
+    video_dict = {}
+
     bar = Bar('Processing', max=len(val_loader))
-    for batch_idx, (data, idx, target) in enumerate(val_loader):
+    for batch_idx, (data, target, idx) in enumerate(val_loader):
         data_time.update(time.time() - end)
 
-        input_var = data.type(torch.FloatTensor).cuda()
-
-        # target = target.float()
-        target_var = target.cuda()
+        input_var = data.float().cuda()
+        target_var = target.long().cuda()
 
         output = model(input_var)
-
+        _, predicted = torch.max(output, 1)
         loss = criterion(output, target_var)
         out = output.data.cpu()
+        # print('Target: ', target_var)
+        # print('Output: ', out)
+        # print('predicted: ', predicted)
+
+        loss.backward()
 
         losses.update(loss.item())
+
+        for i in range(len(idx)):
+            if idx[i] not in frame_dict.keys():
+                frame_dict[idx[i]] = 0
+            frame_dict[idx[i]] += 1 if target[i].item() == predicted[i].item() else 0
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -208,7 +227,7 @@ def validate(val_loader, model, criterion):
 
     bar.finish()
 
-    acc = 0
+    acc = cal_acc(video_dict, frame_dict, v_threshold, f_threshold)
 
     return losses.avg, acc
 
@@ -217,6 +236,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch Video-cap')
     parser.add_argument('--weight-decay', type=float, default=0.00005, metavar='N',
                         help='number of epochs to train (default: 100)')
+    parser.add_argument('--video-threshold', type=float, default=0.5, metavar='N',
+                        help='threshold (default: 0.5)')
+    parser.add_argument('--frame-threshold', type=float, default=0.6, metavar='N',
+                        help='threshold (default: 0.5)')
 
     parser.add_argument('--resume', type=str, default='', metavar='N',
                         help='path to latest checkpoint (default: None)')
@@ -224,10 +247,10 @@ if __name__ == '__main__':
                         help='number of data loading workers (default: 1)')
     parser.add_argument('--step_epoch', default=30, type=int, metavar='N',
                         help='decend the lr in epoch number')
-    parser.add_argument('--batch-size', type=int, default=16, metavar='N',
-                        help='input batch size for training (default: 32)')
+    parser.add_argument('--batch-size', type=int, default=10, metavar='N',
+                        help='input batch size for training (default: 16)')
     parser.add_argument('--test-batch-size', type=int, default=16, metavar='N',
-                        help='input batch size for testing (default: 32)')
+                        help='input batch size for testing (default: 16)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='manual epoch number (default: 100)')
     parser.add_argument('--epochs', type=int, default=90, metavar='N',

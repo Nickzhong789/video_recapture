@@ -31,7 +31,7 @@ def video_cap(video_label_list):
         count += 1
         if count % 5 == 0:
             frame_list.append([image, v_label])
-        if count == 10:
+        if count == 15:
             break
 
     frame_block_list = []
@@ -60,7 +60,7 @@ def video_cap(video_label_list):
 
         sigmaX_list = [3.160, 3.800, 4.786, 6.309, 8.709, 12.589, 19.05, 31.62]
         b_idx = str(v_idx) + '_' + str(f_idx)
-        for in_block in input_blocks:
+        for in_block in input_blocks[:3]:
             op_list = []
             for i in range(16):
                 k_size = (3, 3) if i < 8 else (5, 5)
