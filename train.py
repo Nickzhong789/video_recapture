@@ -16,7 +16,6 @@ from utils.logger import Logger
 import time
 import argparse
 
-
 best_acc = 0
 
 
@@ -124,7 +123,6 @@ def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
     end = time.time()
 
     frame_dict = {}
-    video_dict = {}
 
     bar = Bar('Processing', max=len(train_loader))
     for batch_idx, (data, target, idx) in enumerate(train_loader):
@@ -169,7 +167,7 @@ def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
 
     bar.finish()
 
-    acc = cal_acc(video_dict, frame_dict, v_threshold, f_threshold)
+    acc = cal_acc(frame_dict, v_threshold, f_threshold)
 
     return losses.avg, acc
 
@@ -184,7 +182,6 @@ def validate(val_loader, model, criterion, v_threshold, f_threshold):
     end = time.time()
 
     frame_dict = {}
-    video_dict = {}
 
     bar = Bar('Processing', max=len(val_loader))
     for batch_idx, (data, target, idx) in enumerate(val_loader):
@@ -227,7 +224,7 @@ def validate(val_loader, model, criterion, v_threshold, f_threshold):
 
     bar.finish()
 
-    acc = cal_acc(video_dict, frame_dict, v_threshold, f_threshold)
+    acc = cal_acc(frame_dict, v_threshold, f_threshold)
 
     return losses.avg, acc
 
