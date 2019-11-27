@@ -15,6 +15,7 @@ from utils.logger import Logger
 
 import time
 import argparse
+from video_proc import get_blocks
 
 best_acc = 0
 
@@ -126,29 +127,36 @@ def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
 
     bar = Bar('Processing', max=len(train_loader))
     for batch_idx, (data, target, idx) in enumerate(train_loader):
-        data_time.update(time.time() - end)
+        input_block_list = [[]] * data.size(0)
+        for i in range(data.size(0)):
+            data_time.update(time.time() - end)
 
-        input_var = data.float().cuda()
-        target_var = target.long().cuda()
+            block_list = get_blocks(data[i].numpy())
+            for j in range(len(block_list)):
+                input_block_list[j].append(block_list[j])
 
-        optimizer.zero_grad()
-        output = model(input_var)
-        _, predicted = torch.max(output, 1)
-        loss = criterion(output, target_var)
-        out = output.data.cpu()
-        # print('Target: ', target_var)
-        # print('Output: ', out)
-        # print('predicted: ', predicted)
+        for input_block in input_block_list:
+            input_var = torch.from_numpy(input_block).float().cuda()
+            target_var = target.long().cuda()
 
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            output = model(input_var)
+            _, predicted = torch.max(output, 1)
+            loss = criterion(output, target_var)
+            out = output.data.cpu()
+            # print('Target: ', target_var)
+            # print('Output: ', out)
+            # print('predicted: ', predicted)
 
-        losses.update(loss.item())
+            loss.backward()
+            optimizer.step()
 
-        for i in range(len(idx)):
-            if idx[i] not in frame_dict.keys():
-                frame_dict[idx[i]] = 0
-            frame_dict[idx[i]] += 1 if target[i].item() == predicted[i].item() else 0
+            losses.update(loss.item())
+
+            for i in range(len(idx)):
+                if idx[i] not in frame_dict.keys():
+                    frame_dict[idx[i]] = 0
+                frame_dict[idx[i]] += 1 if target[i].item() == predicted[i].item() else 0
 
         batch_time.update(time.time() - end)
         end = time.time()

@@ -28,27 +28,26 @@ class VideoDataset(Dataset):
         for i in range(len(videoTrainList)):
             f_list, f_num = get_frame(videoTrainList.iloc[i])
             self.frameTrainList.append(frame for frame in f_list)  # [[frame, f_label, f_id]]
-            self.blockTrainNum += f_num * 100
+            self.blockTrainNum += f_num
 
         for i in range(len(videoTestList)):
             f_list, f_num = get_frame(videoTestList.iloc[i])
             self.frameTestList.append(frame for frame in f_list)
-            self.blockTestNum += f_num * 100
+            self.blockTestNum += f_num
 
         print('blockTrainNum: ', self.blockTrainNum)
         print('blockTestNum: ', self.blockTestNum)
 
     def __getitem__(self, idx):
         if self.train:
-
-            block, block_label, block_id = self.blockTrainList[idx]
+            frame, frame_label, frame_id = self.frameTrainList[idx]
         else:
-            block, block_label, block_id = self.blockTestList[idx]
+            frame, frame_label, frame_id = self.frameTestList[idx]
 
-        return block, block_label, block_id
+        return frame, frame_label, frame_id
 
     def __len__(self):
         if self.train:
-            return len(self.blockTrainList)
+            return self.blockTrainNum
         else:
-            return len(self.blockTestList)
+            return self.blockTestNum
