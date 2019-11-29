@@ -64,13 +64,14 @@ def main(args):
 
     train_loader = DataLoader(
         VideoDataset(trainPath, 'video_anno.csv', start_train=args.start_train, train_num=args.train_num,
-                     start_test=args.start_test, test_num=args.test_num,train=True),
+                     start_test=args.start_test, test_num=args.test_num, train=True),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
 
     valid_loader = DataLoader(
-        VideoDataset(trainPath, 'video_anno.csv', train=False, ),
+        VideoDataset(trainPath, 'video_anno.csv', start_train=args.start_train, train_num=args.train_num,
+                     start_test=args.start_test, test_num=args.test_num, train=False),
         batch_size=args.test_batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
