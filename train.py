@@ -30,7 +30,8 @@ def main(args):
 
     model = ConvNet()
 
-    criterion = nn.NLLLoss().cuda()
+    # criterion = nn.NLLLoss().cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
 
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=args.lr,
@@ -60,32 +61,16 @@ def main(args):
     print('  Total params: %.2fM' % (sum(p.numel() for p in model.parameters()) / 1000000.0))
 
     trainPath = args.training_dataset
-    train_transform = transforms.Compose([
-        # transforms.Resize((512, 448)),
-        # transforms.RandomCrop(448),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-            0.229, 0.224, 0.225])
-    ])
 
     train_loader = DataLoader(
-        VideoDataset(trainPath, 'video_anno.csv', train=True, transform=None),
+        VideoDataset(trainPath, 'video_anno.csv', start_train=args.start_train, train_num=args.train_num,
+                     start_test=args.start_test, test_num=args.test_num,train=True),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
 
-    valid_transform = transforms.Compose([
-        # transforms.Resize((512, 448)),
-        # transforms.CenterCrop(448),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-            0.229, 0.224, 0.225])
-    ])
-
     valid_loader = DataLoader(
-        VideoDataset(trainPath, 'video_anno.csv', train=False, transform=None),
+        VideoDataset(trainPath, 'video_anno.csv', train=False, ),
         batch_size=args.test_batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
@@ -124,7 +109,6 @@ def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
     end = time.time()
 
     frame_dict = {}
-    video_dict = {}
 
     bar = Bar('Processing', max=len(train_loader))
     for batch_idx, (data, target, idx) in enumerate(train_loader):
@@ -169,7 +153,7 @@ def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
 
     bar.finish()
 
-    acc = cal_acc(video_dict, frame_dict, v_threshold, f_threshold)
+    acc = cal_acc(frame_dict, v_threshold, f_threshold)
 
     return losses.avg, acc
 
@@ -184,7 +168,6 @@ def validate(val_loader, model, criterion, v_threshold, f_threshold):
     end = time.time()
 
     frame_dict = {}
-    video_dict = {}
 
     bar = Bar('Processing', max=len(val_loader))
     for batch_idx, (data, target, idx) in enumerate(val_loader):
@@ -227,7 +210,7 @@ def validate(val_loader, model, criterion, v_threshold, f_threshold):
 
     bar.finish()
 
-    acc = cal_acc(video_dict, frame_dict, v_threshold, f_threshold)
+    acc = cal_acc(frame_dict, v_threshold, f_threshold)
 
     return losses.avg, acc
 
@@ -240,6 +223,15 @@ if __name__ == '__main__':
                         help='threshold (default: 0.5)')
     parser.add_argument('--frame-threshold', type=float, default=0.6, metavar='N',
                         help='threshold (default: 0.5)')
+
+    parser.add_argument('--start_train', type=int, default=0, metavar='N',
+                        help='start pos of training video (default: 0)')
+    parser.add_argument('--start_num', type=int, default=20, metavar='N',
+                        help='amount of training video (default: 20)')
+    parser.add_argument('--start_test', type=int, default=100, metavar='N',
+                        help='start pos of testing video (default: 100)')
+    parser.add_argument('--start_num', type=int, default=5, metavar='N',
+                        help='amount of testing video (default: 5)')
 
     parser.add_argument('--resume', type=str, default='', metavar='N',
                         help='path to latest checkpoint (default: None)')

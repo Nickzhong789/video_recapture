@@ -1,13 +1,11 @@
-import numpy as np
+__all__ = ['cal_acc', 'AverageMeter']
 
 
-__all__ = ['cal_acc', 'accuracy', 'AverageMeter']
-
-
-def cal_acc(v_dict, f_dict, v_t, f_t):
+def cal_acc(f_dict, v_t, f_t):
+    v_dict = {}
     for key, value in f_dict.items():
         v_id, f_id = key.split('_')
-        if v_dict[v_id] not in v_dict.keys():
+        if v_id not in v_dict.keys():
             v_dict[v_id] = {'correct': 0, 'total': 0}
         if value > 100 * f_t:
             v_dict[v_id]['correct'] += 1
@@ -21,10 +19,6 @@ def cal_acc(v_dict, f_dict, v_t, f_t):
         v_total += 1
     acc = v_correct / v_total
     return acc
-
-
-def accuracy(pred, y):
-    return 1.0
 
 
 class AverageMeter(object):

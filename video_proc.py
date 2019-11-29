@@ -20,7 +20,7 @@ def generate_anno(path):
     df.to_csv('./video_anno.csv', index=None)
 
 
-def video_cap(video_label_list):
+def video_cap(video_label_list):  # transform a video to blocks
     [video, v_label, v_idx] = video_label_list
     video_obj = cv2.VideoCapture(video)
     ret_val = 1
@@ -31,8 +31,6 @@ def video_cap(video_label_list):
         count += 1
         if count % 5 == 0:
             frame_list.append([image, v_label])
-        if count == 15:
-            break
 
     frame_block_list = []
     f_idx = 0
