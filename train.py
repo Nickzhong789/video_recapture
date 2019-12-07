@@ -15,7 +15,7 @@ from utils.logger import Logger
 
 import time
 import argparse
-from video_proc import get_blocks
+
 
 best_acc = 0
 
@@ -30,7 +30,8 @@ def main(args):
 
     model = ConvNet()
 
-    criterion = nn.NLLLoss().cuda()
+    # criterion = nn.NLLLoss().cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
 
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=args.lr,
@@ -60,32 +61,15 @@ def main(args):
     print('  Total params: %.2fM' % (sum(p.numel() for p in model.parameters()) / 1000000.0))
 
     trainPath = args.training_dataset
-    train_transform = transforms.Compose([
-        # transforms.Resize((512, 448)),
-        # transforms.RandomCrop(448),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-            0.229, 0.224, 0.225])
-    ])
 
     train_loader = DataLoader(
-        VideoDataset(trainPath, 'video_anno.csv', train=True, transform=None),
+        VideoDataset(trainPath, 'anno.csv', train=True),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
 
-    valid_transform = transforms.Compose([
-        # transforms.Resize((512, 448)),
-        # transforms.CenterCrop(448),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-            0.229, 0.224, 0.225])
-    ])
-
     valid_loader = DataLoader(
-        VideoDataset(trainPath, 'video_anno.csv', train=False, transform=None),
+        VideoDataset(trainPath, 'anno.csv', train=False),
         batch_size=args.test_batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True
     )
@@ -127,36 +111,29 @@ def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
 
     bar = Bar('Processing', max=len(train_loader))
     for batch_idx, (data, target, idx) in enumerate(train_loader):
-        input_block_list = [[]] * data.size(0)
-        for i in range(data.size(0)):
-            data_time.update(time.time() - end)
+        data_time.update(time.time() - end)
 
-            block_list = get_blocks(data[i].numpy())
-            for j in range(len(block_list)):
-                input_block_list[j].append(block_list[j])
+        input_var = data.float().cuda()
+        target_var = target.long().cuda()
 
-        for input_block in input_block_list:
-            input_var = torch.from_numpy(input_block).float().cuda()
-            target_var = target.long().cuda()
+        optimizer.zero_grad()
+        output = model(input_var)
+        _, predicted = torch.max(output, 1)
+        loss = criterion(output, target_var)
+        out = output.data.cpu()
+        # print('Target: ', target_var)
+        # print('Output: ', out)
+        # print('predicted: ', predicted)
 
-            optimizer.zero_grad()
-            output = model(input_var)
-            _, predicted = torch.max(output, 1)
-            loss = criterion(output, target_var)
-            out = output.data.cpu()
-            # print('Target: ', target_var)
-            # print('Output: ', out)
-            # print('predicted: ', predicted)
+        loss.backward()
+        optimizer.step()
 
-            loss.backward()
-            optimizer.step()
+        losses.update(loss.item())
 
-            losses.update(loss.item())
-
-            for i in range(len(idx)):
-                if idx[i] not in frame_dict.keys():
-                    frame_dict[idx[i]] = 0
-                frame_dict[idx[i]] += 1 if target[i].item() == predicted[i].item() else 0
+        for i in range(len(idx)):
+            if idx[i] not in frame_dict.keys():
+                frame_dict[idx[i]] = 0
+            frame_dict[idx[i]] += 1 if target[i].item() == predicted[i].item() else 0
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -252,9 +229,9 @@ if __name__ == '__main__':
                         help='number of data loading workers (default: 1)')
     parser.add_argument('--step_epoch', default=30, type=int, metavar='N',
                         help='decend the lr in epoch number')
-    parser.add_argument('--batch-size', type=int, default=10, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 16)')
-    parser.add_argument('--test-batch-size', type=int, default=16, metavar='N',
+    parser.add_argument('--test-batch-size', type=int, default=32, metavar='N',
                         help='input batch size for testing (default: 16)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='manual epoch number (default: 100)')

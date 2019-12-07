@@ -1,6 +1,3 @@
-import numpy as np
-
-
 __all__ = ['cal_acc', 'AverageMeter']
 
 
@@ -21,8 +18,6 @@ def cal_acc(f_dict, v_t, f_t):
             v_correct += 1
         v_total += 1
     acc = v_correct / v_total
-    print('v_correct: ', v_correct)
-    print('v_total: ', v_total)
     return acc
 
 
