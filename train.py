@@ -30,8 +30,8 @@ def main(args):
 
     model = ConvNet()
 
-    # criterion = nn.NLLLoss().cuda()
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.NLLLoss().cuda()
+    # criterion = nn.CrossEntropyLoss().cuda()
 
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=args.lr,
@@ -74,6 +74,10 @@ def main(args):
         num_workers=args.workers, pin_memory=True
     )
 
+    log_title = 'Frame Info'
+    logger_frame = Logger(join(args.model, 'frame_info.txt'), title=log_title)
+    logger_frame.set_names(['Epoch', 'Video Id', 'Frame Id', 'Correct Blocks'])
+
     lr = args.lr
     for epoch in range(args.start_epoch, args.epochs):
         lr = adjust_learing_rate(optimizer, epoch, lr, args.step_epoch)
@@ -81,7 +85,8 @@ def main(args):
 
         train_loss, train_acc = train(model, train_loader, optimizer, criterion,
                                       args.video_threshold, args.frame_threshold)
-        valid_loss, valid_acc = validate(valid_loader, model, criterion, args.video_threshold, args.frame_threshold)
+        valid_loss, valid_acc, frame_dict = validate(valid_loader, model, criterion,
+                                                     args.video_threshold, args.frame_threshold)
 
         logger.append([epoch + 1, lr, train_loss, valid_loss, train_acc, valid_acc])
 
@@ -94,7 +99,12 @@ def main(args):
             'optimizer': optimizer.state_dict()
         }, is_best, checkpoint=args.model)
 
+        for key, value in frame_dict.items():
+            v_id, f_id = key.split('_')
+            logger_frame.append([epoch + 1, int(v_id), int(f_id), value])
+
     logger.close()
+    logger_frame.close()
 
 
 def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
@@ -120,10 +130,6 @@ def train(model, train_loader, optimizer, criterion, v_threshold, f_threshold):
         output = model(input_var)
         _, predicted = torch.max(output, 1)
         loss = criterion(output, target_var)
-        out = output.data.cpu()
-        # print('Target: ', target_var)
-        # print('Output: ', out)
-        # print('predicted: ', predicted)
 
         loss.backward()
         optimizer.step()
@@ -178,10 +184,6 @@ def validate(val_loader, model, criterion, v_threshold, f_threshold):
         output = model(input_var)
         _, predicted = torch.max(output, 1)
         loss = criterion(output, target_var)
-        out = output.data.cpu()
-        # print('Target: ', target_var)
-        # print('Output: ', out)
-        # print('predicted: ', predicted)
 
         loss.backward()
 
@@ -211,7 +213,7 @@ def validate(val_loader, model, criterion, v_threshold, f_threshold):
 
     acc = cal_acc(frame_dict, v_threshold, f_threshold)
 
-    return losses.avg, acc
+    return losses.avg, acc, frame_dict
 
 
 if __name__ == '__main__':
@@ -248,8 +250,8 @@ if __name__ == '__main__':
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
     parser.add_argument('--training-dataset', type=str, default='',
-                        help='Path to the data directory containing aligned face patches.')
+                        help='Path to the data directory.')
     parser.add_argument('--model', type=str, default='./checkpoint/convNet',
-                        help='Path to the data directory containing aligned face patches.')
+                        help='Path to the data directory.')
 
     main(parser.parse_args())
